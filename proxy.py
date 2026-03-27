@@ -7,16 +7,13 @@ allowing seamless switching when Anthropic rate limits are hit.
 
 import json
 import os
-import sys
 import uuid
-import time
-import http.server
 import urllib.request
 import urllib.error
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 PROXY_PORT = 3399
-OLLAMA_BASE = "http://localhost:11434"
+OLLAMA_BASE = os.getenv("OLLAMA_BASE", "http://localhost:11434")
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 
@@ -24,7 +21,7 @@ def load_config():
     try:
         with open(CONFIG_FILE) as f:
             return json.load(f)
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError):
         return {"model": "llama3.2", "mode": "ollama"}
 
 
@@ -136,7 +133,6 @@ class ProxyHandler(BaseHTTPRequestHandler):
         request_model = body.get("model", "claude-sonnet-4-6")
         is_streaming = body.get("stream", False)
         ollama_req = translate_request(body)
-        ollama_req["stream"] = is_streaming
 
         try:
             req = urllib.request.Request(
@@ -180,7 +176,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 "model": request_model,
                 "stop_reason": None,
                 "stop_sequence": None,
-                "usage": {"input_tokens": 0, "output_tokens": 1},
+                "usage": {"input_tokens": 0, "output_tokens": 0},
             },
         }))
         # content_block_start

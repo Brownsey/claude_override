@@ -12,7 +12,6 @@ import sys
 import threading
 import time
 import urllib.error
-import urllib.request
 from http.server import HTTPServer
 from unittest.mock import patch
 
@@ -108,6 +107,7 @@ def test_server():
     time.sleep(0.1)  # give the server a moment to bind
     yield
     server.shutdown()
+    server.server_close()
 
 
 def sync_body(text="hi", input_tokens=5, output_tokens=3):
@@ -310,6 +310,35 @@ class TestTranslateRequest:
         assert len(result["messages"]) == 3
         assert result["messages"][1]["role"] == "assistant"
 
+    def test_unknown_block_type_is_ignored(self):
+        body = {"messages": [{
+            "role": "user",
+            "content": [
+                {"type": "unknown_type", "data": "ignored"},
+                {"type": "text", "text": "Hello"},
+            ],
+        }]}
+        result = proxy.translate_request(body)
+        assert result["messages"][0]["content"] == "Hello"
+
+    def test_empty_system_list_produces_empty_content(self):
+        body = {"system": [], "messages": [{"role": "user", "content": "Hi"}]}
+        result = proxy.translate_request(body)
+        # Empty list: system message is added with empty content
+        assert result["messages"][0]["role"] == "system"
+        assert result["messages"][0]["content"] == ""
+
+    def test_system_list_skips_non_text_blocks(self):
+        body = {
+            "system": [
+                {"type": "tool_result", "content": "ignored"},
+                {"type": "text", "text": "Only this"},
+            ],
+            "messages": [{"role": "user", "content": "Hi"}],
+        }
+        result = proxy.translate_request(body)
+        assert result["messages"][0]["content"] == "Only this"
+
 
 # ================================================================
 #  Integration: GET /health
@@ -435,6 +464,17 @@ class TestSyncResponse:
         _, _, data = self._request(test_server)
         assert data["id"].startswith("msg_")
 
+    def test_invalid_json_from_ollama_returns_500(self, test_server):
+        fake = FakeOllamaResponse(data=b"not valid json {{")
+        with patch("proxy.urllib.request.urlopen", return_value=fake):
+            status, _, body = http("POST", "/v1/messages", body={
+                "model": "claude-sonnet-4-6",
+                "messages": [{"role": "user", "content": "Hi"}],
+                "stream": False,
+            })
+        assert status == 500
+        assert json.loads(body)["type"] == "error"
+
 
 # ================================================================
 #  Integration: POST /v1/messages — streaming (SSE)
@@ -530,3 +570,26 @@ class TestStreamingResponse:
         events = parse_sse(body)
         msg_delta = next(e for e in events if e["type"] == "message_delta")
         assert msg_delta["data"]["usage"]["output_tokens"] == 5
+
+    def test_message_start_has_msg_id(self, test_server):
+        _, _, body = self._request(test_server)
+        events = parse_sse(body)
+        start = next(e for e in events if e["type"] == "message_start")
+        assert start["data"]["message"]["id"].startswith("msg_")
+
+    def test_truncated_stream_still_emits_stop_events(self, test_server):
+        # Stream ends without a done=True chunk — proxy should still close cleanly
+        chunks = [
+            json.dumps({"message": {"content": "Hello"}, "done": False}).encode() + b"\n",
+        ]
+        fake = FakeOllamaResponse(chunks=chunks)
+        with patch("proxy.urllib.request.urlopen", return_value=fake):
+            status, _, body = http("POST", "/v1/messages", body={
+                "model": "claude-sonnet-4-6",
+                "messages": [{"role": "user", "content": "Hi"}],
+                "stream": True,
+            })
+        assert status == 200
+        types = [e["type"] for e in parse_sse(body)]
+        assert "message_stop" in types
+        assert "content_block_stop" in types
