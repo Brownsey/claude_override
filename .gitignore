@@ -1,1 +1,6 @@
 .claude/
+__pycache__/
+*.pyc
+*.pyo
+proxy.log
+*.tmp

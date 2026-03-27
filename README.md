@@ -10,13 +10,14 @@ There is one bat file: `toggle_ollama.bat`. How you use it depends on whether yo
 
 ```
 claude_override/
-├── toggle_ollama.bat   ← the only file you interact with
+├── toggle_ollama.bat   ← Windows
+├── toggle_ollama.sh    ← Mac / Linux
 ├── proxy.py            ← HTTP proxy server (managed automatically)
 ├── config.json         ← stores your chosen Ollama fallback model
 └── README.md
 ```
 
-**`toggle_ollama.bat`** — handles everything: installing Ollama, pulling models, starting/stopping the proxy, and setting/clearing `ANTHROPIC_BASE_URL`.
+**`toggle_ollama.bat`** (Windows) / **`toggle_ollama.sh`** (Mac/Linux) — handles everything: installing Ollama, pulling models, starting/stopping the proxy, and setting/clearing `ANTHROPIC_BASE_URL`.
 
 **`proxy.py`** — a stdlib-only Python server on port 3399. Translates Anthropic Messages API calls (including streaming SSE, system prompts, tool calls, tool results) into Ollama `/api/chat` format and streams responses back. Reads `config.json` on every request so you can change model without restarting.
 
@@ -47,12 +48,29 @@ No Claude settings files are ever modified.
 
 ## Requirements
 
-| | |
-|---|---|
-| Windows 10 / 11 | `setx`, `reg`, `netstat`, `curl` all built-in |
-| Python 3.8+ | Must be on PATH — no pip installs needed |
-| VS Code + Claude Code | Extension or CLI |
-| ~2–10 GB free disk | Depends on model size |
+| | Windows | Mac | Linux |
+|---|---|---|---|
+| Script | `toggle_ollama.bat` | `toggle_ollama.sh` | `toggle_ollama.sh` |
+| Python 3.8+ | Must be on PATH | Must be on PATH | Must be on PATH |
+| Ollama | Auto-installed | Auto via Homebrew | Auto via install script |
+| Free disk | ~2–10 GB | ~2–10 GB | ~2–10 GB |
+
+Mac users without Homebrew: install it from [brew.sh](https://brew.sh) or download Ollama manually from [ollama.com/download](https://ollama.com/download).
+
+---
+
+## Usage
+
+Run the script for your OS — everything else is the same.
+
+```bash
+# Mac / Linux — make executable once, then run directly
+chmod +x toggle_ollama.sh
+./toggle_ollama.sh
+
+# Windows
+toggle_ollama
+```
 
 ---
 
@@ -62,8 +80,9 @@ This is the default. The bat file window being open = Ollama active. Closing it 
 
 ### Switch TO Ollama
 
-```bat
-toggle_ollama
+```bash
+./toggle_ollama.sh     # Mac/Linux
+toggle_ollama          # Windows
 ```
 
 - First run: downloads and installs Ollama, pulls the model (~2 GB for llama3.2)
@@ -75,17 +94,17 @@ toggle_ollama
 
 ### Switch BACK to normal Claude
 
-Press `Ctrl+C` in the `toggle_ollama` window, then press **N** when prompted:
+Press `Ctrl+C` in the terminal running the script.
 
-```
-Terminate batch job (Y/N)? N
-```
+- **Mac/Linux** — cleanup runs automatically via trap. Done.
+- **Windows** — press **N** at the `Terminate batch job (Y/N)?` prompt. Cleanup runs automatically.
 
-The cleanup runs automatically — `ANTHROPIC_BASE_URL` is removed. **Restart VS Code** to return to your normal Claude.
+`ANTHROPIC_BASE_URL` is removed. **Restart VS Code** to return to your normal Claude.
 
-> If you closed the window with the X button instead, run this to clean up:
-> ```bat
-> toggle_ollama off
+> If the process was force-killed instead, run:
+> ```bash
+> ./toggle_ollama.sh off   # Mac/Linux
+> toggle_ollama off        # Windows
 > ```
 
 ---
@@ -136,16 +155,18 @@ Paste it — the next `claude` command uses Anthropic again immediately.
 
 ## All Commands
 
+Use `toggle_ollama` on Windows or `./toggle_ollama.sh` on Mac/Linux.
+
 **VS Code extension mode:**
 ```
-toggle_ollama          Switch TO Ollama  (window stays open while active)
-toggle_ollama off      Force cleanup     (only if closed with X)
+toggle_ollama              Switch TO Ollama  (keep window open while active)
+toggle_ollama off          Force cleanup     (only if process was killed)
 ```
 
 **CLI / terminal mode:**
 ```
-toggle_ollama cli-on   Switch TO Ollama  (proxy starts in background)
-toggle_ollama cli-off  Switch BACK       (proxy stops)
+toggle_ollama cli-on       Switch TO Ollama  (proxy starts in background)
+toggle_ollama cli-off      Switch BACK       (proxy stops)
 ```
 
 **Utilities:**
